@@ -1,79 +1,291 @@
-# app.py
-from fastapi import FastAPI, Request
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-import csv
-import os
-import smtplib
-from email.message import EmailMessage
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>فرم بیمه</title>
+<style>
+    body {
+        font-family: Tahoma, sans-serif;
+        background: #f5f5f5;
+        margin: 0;
+        padding-top: 80px;
+        text-align: center;
+    }
+    header {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        background: #ffffff;
+        box-shadow: 0 0 10px rgba(0,0,0,0.08);
+        padding: 10px;
+        z-index: 1000;
+        display: flex;
+        justify-content: center;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+    .btn {
+        background: #007bff;
+        color: #fff;
+        padding: 10px 18px;
+        margin: 4px;
+        border: none;
+        border-radius: 50px;
+        cursor: pointer;
+        font-size: 14px;
+        transition: background .15s;
+    }
+    .btn:hover { background: #0056b3; }
 
-app = FastAPI()
+    .form-box {
+        display: none;
+        background: #e6f0ff;
+        padding: 20px;
+        border-radius: 12px;
+        box-shadow: 0 6px 18px rgba(0,0,0,0.06);
+        width: 360px;
+        margin: 26px auto;
+        animation: fadeIn .4s ease-in-out;
+        text-align: right;
+    }
+    .form-group { margin-bottom: 14px; }
+    input, textarea, select {
+        width: 100%;
+        padding: 10px;
+        border: 1px solid #ccd6ee;
+        border-radius: 8px;
+        font-size: 14px;
+        box-sizing: border-box;
+    }
+    textarea { min-height: 90px; resize: vertical; }
+    .hint { font-size: 13px; color: #555; margin-top: 6px; }
 
-# اجازه اتصال از فرانت (اگر میزبان جداست)
-app.add_middleware(
-  CORSMiddleware,
-  allow_origins=["*"],
-  allow_credentials=True,
-  allow_methods=["*"],
-  allow_headers=["*"],
-)
+    .send {
+        background: #007bff;
+        color: #fff;
+        padding: 11px;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        width: 100%;
+        font-size: 15px;
+    }
+    .send:hover { background: #0056b3; }
 
-CSV_FILE = "submissions.csv"
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(-8px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
 
-class Submission(BaseModel):
-    insurance: str
-    name: str
-    phone: str
-    description: str = ""
-    extra: dict = {}
+    /* Responsive */
+    @media (max-width:420px){
+      .form-box { width: calc(100% - 40px); margin: 14px; padding: 16px; }
+      .btn { padding: 8px 12px; font-size:13px; }
+    }
+</style>
+</head>
+<body>
 
-def ensure_csv():
-    if not os.path.exists(CSV_FILE):
-        with open(CSV_FILE, "w", newline="", encoding="utf-8") as f:
-            writer = csv.writer(f)
-            writer.writerow(["timestamp","insurance","name","phone","extra","description"])
+<header>
+    <button class="btn" onclick="showForm('بیمه شخص ثالث')">شخص ثالث</button>
+    <button class="btn" onclick="showForm('بیمه بدنه')">بدنه</button>
+    <button class="btn" onclick="showForm('بیمه مسئولیت')">مسئولیت</button>
+    <button class="btn" onclick="showForm('بیمه تکمیل درمان')">تکمیل درمان</button>
+</header>
 
-@app.post("/api/submit")
-async def submit(s: Submission):
-    ensure_csv()
-    import datetime
-    ts = datetime.datetime.utcnow().isoformat()
-    # save to csv
-    with open(CSV_FILE, "a", newline="", encoding="utf-8") as f:
-        writer = csv.writer(f)
-        writer.writerow([ts, s.insurance, s.name, s.phone, str(s.extra), s.description])
+<div id="insurance-form" class="form-box" role="form" aria-labelledby="form-title">
+    <h3 id="form-title" style="margin-top:0;"></h3>
 
-    # optional: send email backup (configure below)
-    try:
-        SMTP_HOST = os.getenv("SMTP_HOST")      # e.g. smtp.gmail.com
-        SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
-        SMTP_USER = os.getenv("SMTP_USER")
-        SMTP_PASS = os.getenv("SMTP_PASS")
-        EMAIL_TO = os.getenv("EMAIL_TO")        # where to send notifications
+    <!-- محلی که فیلدهای دینامیک درج می‌شوند -->
+    <div id="dynamic-fields"></div>
 
-        if SMTP_HOST and SMTP_USER and SMTP_PASS and EMAIL_TO:
-            msg = EmailMessage()
-            msg["Subject"] = f"درخواست بیمه — {s.insurance}"
-            msg["From"] = SMTP_USER
-            msg["To"] = EMAIL_TO
-            body = f"""
-درخواست جدید بیمه
-نوع بیمه: {s.insurance}
-نام: {s.name}
-شماره: {s.phone}
-اضافه: {s.extra}
-توضیحات: {s.description}
-"""
-            msg.set_content(body)
-            with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
-                server.starttls()
-                server.login(SMTP_USER, SMTP_PASS)
-                server.send_message(msg)
-    except Exception as e:
-        # log but don't fail the request
-        print("Email send failed:", e)
+    <div class="form-group">
+        <input type="text" id="name" placeholder="نام شما" autocomplete="name" required>
+    </div>
 
-    # optional: integrate with SMS/WhatsApp provider here
-    # e.g., call provider API with requests.post(...)
+    <div class="form-group">
+        <input type="tel" id="phone" placeholder="شماره شما (مثال: 09123456789)" autocomplete="tel" required>
+    </div>
 
-    return {"ok": True}
+    <div class="form-group">
+        <textarea id="description" placeholder="توضیحات (دلخواه) — مثال: خواهان پوشش X هستم یا سوال درباره Y"></textarea>
+    </div>
+
+    <button class="send" onclick="sendToWhatsApp()">ارسال به واتساپ</button>
+    <p class="hint">پس از زدن ارسال، واتساپ (اپ یا وب) باز می‌شود؛ روی ارسال در واتساپ کلیک کنید تا پیام فرستاده شود.</p>
+</div>
+
+<script>
+/* شماره مقصد را در این متغیر بگذار */
+const WHATSAPP_NUMBER = '989171912114';
+
+let selectedInsurance = '';
+
+function showForm(type) {
+    selectedInsurance = type;
+    document.getElementById('form-title').innerText = type;
+    const dynamicFields = document.getElementById('dynamic-fields');
+    dynamicFields.innerHTML = ''; // پاک کردن فیلدهای قبلی
+
+    if (type === 'بیمه شخص ثالث' || type === 'بیمه بدنه') {
+        // فیلدهای مربوط به خودرو
+        dynamicFields.innerHTML = `
+            <div class="form-group">
+                <select id="vehicleType" aria-label="نوع خودرو">
+                    <option value="">نوع خودرو (انتخاب شود)</option>
+                    <option>سواری</option>
+                    <option>وانت</option>
+                    <option>کامیونت</option>
+                    <option>کامیون</option>
+                    <option>غیر متعارف</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <select id="carSelect" aria-label="انتخاب خودرو">
+                    <option value="">انتخاب خودرو (در صورت نبود، گزینه آخر را انتخاب کنید)</option>
+                    <option>پژو 206</option>
+                    <option>پژو پارس</option>
+                    <option>پژو 405</option>
+                    <option>سمند</option>
+                    <option>تیبا</option>
+                    <option>پراید 131</option>
+                    <option>دنا پلاس</option>
+                    <option>هیوندای النترا</option>
+                    <option>کیا سراتو</option>
+                    <option>تویوتا کرولا</option>
+                    <option>BMW 320i</option>
+                    <option>Mercedes C200</option>
+                    <option value="other">خودروی من در لیست نبود</option>
+                </select>
+                <input type="text" id="customCar" placeholder="در صورت نبودن در لیست، نام خودرو را بنویسید" style="display:none; margin-top:10px;">
+            </div>
+            <div class="form-group">
+                <select id="colorSelect" aria-label="رنگ خودرو">
+                    <option value="">رنگ خودرو (انتخاب شود)</option>
+                    <option>سفید</option>
+                    <option>مشکی</option>
+                    <option>نقره‌ای</option>
+                    <option>خاکستری</option>
+                    <option>قرمز</option>
+                    <option>آبی</option>
+                    <option>سبز</option>
+                    <option>زرد</option>
+                    <option>طلایی</option>
+                    <option>بنفش</option>
+                    <option>صورتی</option>
+                    <option>نارنجی</option>
+                    <option>قهوه‌ای</option>
+                    <option>کرم</option>
+                    <option value="other_color">رنگ من در لیست نیست (وارد کنید)</option>
+                </select>
+                <input type="text" id="customColor" placeholder="در صورت نبودن رنگ در لیست، رنگ را بنویسید" style="display:none; margin-top:10px;">
+            </div>
+        `;
+        // event listeners for dynamic selects
+        setTimeout(() => {
+            const carSelect = document.getElementById('carSelect');
+            const customCar = document.getElementById('customCar');
+            carSelect.addEventListener('change', () => {
+                customCar.style.display = carSelect.value === 'other' ? 'block' : 'none';
+            });
+
+            const colorSelect = document.getElementById('colorSelect');
+            const customColor = document.getElementById('customColor');
+            colorSelect.addEventListener('change', () => {
+                customColor.style.display = colorSelect.value === 'other_color' ? 'block' : 'none';
+            });
+        }, 0);
+
+    } else if (type === 'بیمه مسئولیت') {
+        // فیلدهای مخصوص مسئولیت
+        dynamicFields.innerHTML = `
+            <div class="form-group">
+                <input type="text" id="job" placeholder="شغل (مثلاً: کسب‌وکار/پزشک/فروشگاه)">
+            </div>
+            <div class="form-group">
+                <input type="text" id="workPlace" placeholder="محل فعالیت (شهر یا آدرس کوتاه)">
+            </div>
+        `;
+    } else if (type === 'بیمه تکمیل درمان') {
+        // فیلدهای مخصوص تکمیل درمان
+        dynamicFields.innerHTML = `
+            <div class="form-group">
+                <input type="text" id="insuranceCompany" placeholder="نام بیمه‌گر قبلی (در صورت وجود)">
+            </div>
+            <div class="form-group">
+                <input type="number" id="familyCount" placeholder="تعداد اعضای تحت پوشش (مثلاً: 1، 2، 3)">
+            </div>
+            <div class="form-group">
+                <input type="text" id="history" placeholder="سابقه بیمه (مثلاً: 3 سال با شرکت X)">
+            </div>
+        `;
+    }
+    // نمایش فرم
+    document.getElementById('insurance-form').style.display = 'block';
+    // اسکرول نرم به فرم (اگر لازم باشه)
+    setTimeout(()=> document.getElementById('insurance-form').scrollIntoView({behavior:'smooth', block:'center'}), 150);
+}
+
+function sendToWhatsApp(){
+    if (!selectedInsurance) { alert('لطفاً نوع بیمه را انتخاب کنید.'); return; }
+
+    const name = document.getElementById('name').value.trim();
+    const phone = document.getElementById('phone').value.trim();
+    const description = document.getElementById('description').value.trim();
+
+    if (!name || !phone) { alert('لطفاً نام و شماره تماس را وارد کنید.'); return; }
+
+    let extraLines = '';
+
+    if (selectedInsurance === 'بیمه شخص ثالث' || selectedInsurance === 'بیمه بدنه') {
+        const vehicleType = (document.getElementById('vehicleType') || {}).value || '';
+        const carSelect = document.getElementById('carSelect');
+        let car = '';
+        if (carSelect) {
+            car = carSelect.value === 'other' ? (document.getElementById('customCar').value || '') : carSelect.value || '';
+        }
+        const colorSelect = document.getElementById('colorSelect');
+        let color = '';
+        if (colorSelect) {
+            color = colorSelect.value === 'other_color' ? (document.getElementById('customColor').value || '') : colorSelect.value || '';
+        }
+
+        extraLines += (vehicleType ? 'نوع خودرو: ' + vehicleType + '\n' : '');
+        extraLines += (car ? 'خودرو: ' + car + '\n' : '');
+        extraLines += (color ? 'رنگ: ' + color + '\n' : '');
+
+    } else if (selectedInsurance === 'بیمه مسئولیت') {
+        const job = (document.getElementById('job') || {}).value || '';
+        const workPlace = (document.getElementById('workPlace') || {}).value || '';
+        extraLines += (job ? 'شغل: ' + job + '\n' : '');
+        extraLines += (workPlace ? 'محل فعالیت: ' + workPlace + '\n' : '');
+    } else if (selectedInsurance === 'بیمه تکمیل درمان') {
+        const prev = (document.getElementById('insuranceCompany') || {}).value || '';
+        const fam = (document.getElementById('familyCount') || {}).value || '';
+        const hist = (document.getElementById('history') || {}).value || '';
+        extraLines += (prev ? 'بیمه‌گر قبلی: ' + prev + '\n' : '');
+        extraLines += (fam ? 'تعداد اعضای خانواده: ' + fam + '\n' : '');
+        extraLines += (hist ? 'سابقه بیمه: ' + hist + '\n' : '');
+    }
+
+    const lines = [
+        'درخواست مشاوره بیمه',
+        'نوع بیمه: ' + selectedInsurance,
+        extraLines.trim(),
+        'نام متقاضی: ' + name,
+        'شماره تماس: ' + phone,
+        '',
+        'توضیحات:',
+        description || '-'
+    ].filter(Boolean).join('\n');
+
+    const encoded = encodeURIComponent(lines);
+    const url = 'https://wa.me/' + WHATSAPP_NUMBER + '?text=' + encoded;
+    window.open(url, '_blank').focus();
+}
+</script>
+
+</body>
+</html>
